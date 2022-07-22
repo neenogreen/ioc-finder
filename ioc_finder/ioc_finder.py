@@ -1,6 +1,7 @@
 """Python package for finding observables in text."""
 
 import json
+import re
 import urllib.parse as urlparse
 from typing import Dict, List
 
@@ -17,6 +18,29 @@ def _deduplicate(indicator_list: List) -> List:
     return list(set(indicator_list))
 
 
+def _listify_with_get_position(indicator_list: ParseResults,text:str) -> List:
+    """Convert the multi-dimensional list into a one-dimensional list with empty entries and duplicates removed."""
+    #dedup = _deduplicate([indicator[0][1] for indicator in indicator_list if indicator[0]])
+    
+
+    pos_map = {}
+    to_dedup = []
+    for indicator in indicator_list:
+        tmp_pos=0
+        if len(indicator) > 0:
+            position = [_.start() for _ in re.finditer(indicator[0], text)]
+            if(indicator[0] in to_dedup):
+                continue
+            to_dedup.append(indicator[0])
+            for x in position:
+                if pos_map.get(indicator[0]):
+                    tmp_pos=x+len(indicator[0])
+                    pos_map[indicator[0]].append([x,tmp_pos])
+                else:
+                    tmp_pos=x+len(indicator[0])
+                    pos_map[indicator[0]]=[[x,tmp_pos]]
+    return _deduplicate(to_dedup), pos_map 
+
 def _listify(indicator_list: ParseResults) -> List:
     """Convert the multi-dimensional list into a one-dimensional list with empty entries and duplicates removed."""
     #dedup = _deduplicate([indicator[0][1] for indicator in indicator_list if indicator[0]])
@@ -29,7 +53,6 @@ def _listify(indicator_list: ParseResults) -> List:
                 pos_map[indicator[1][0]].append([indicator[0], indicator[2]])
             else:
                 pos_map[indicator[1][0]] = [[indicator[0], indicator[2]]]
-
     return _deduplicate(to_dedup), pos_map
 
 
@@ -49,13 +72,13 @@ def prepare_text(text: str) -> str:
     return text
 
 
-def parse_urls(text: str, *, parse_urls_without_scheme: bool = True) -> List:
+def parse_urls(text: str, *, parse_urls_without_scheme: bool = True,original_text:str) -> List:
     """."""
     if parse_urls_without_scheme:
-        urls = Located(ioc_grammars.scheme_less_url).searchString(text)
+        urls = ioc_grammars.scheme_less_url.searchString(text)
     else:
-        urls = Located(ioc_grammars.url).searchString(text)
-    urls, pos_map = _listify(urls)
+        urls = ioc_grammars.url.searchString(text)
+    urls, pos_map = _listify_with_get_position(urls,original_text)
 
     clean_urls = []
 
@@ -86,18 +109,18 @@ def parse_urls(text: str, *, parse_urls_without_scheme: bool = True) -> List:
 def _remove_url_domain_name(urls: List, text) -> str:
     """Remove the domain name of each url from the text."""
     for url in urls:
-        parsed_url = ioc_grammars.scheme_less_url.parseString(url)
+        parsed_url = ioc_grammars.scheme_less_url.parseString(url,text)
         text = text.replace(parsed_url.url_authority, ' ')
     return text
 
 
-def _remove_url_paths(urls: List, text: str) -> str:
+def _remove_url_paths(urls: List, text: str,original_text: str) -> str:
     """Remove the path of each url from the text."""
     for url in urls:
         parsed_url = ioc_grammars.scheme_less_url.parseString(url)
         url_path = urlparse.unquote_plus(parsed_url.url_path)
 
-        is_cidr_range = parse_ipv4_cidrs(str(url))
+        is_cidr_range = parse_ipv4_cidrs(str(url),original_text)
         # if the 'url' has a URL path and is not a cidr range, remove the url_path
         if not is_cidr_range and len(url_path) > 1:
             text = text.replace(url_path, ' ')
@@ -110,41 +133,42 @@ def _percent_decode_url(urls: List, text: str) -> str:
     return text
 
 
-def parse_domain_names(text):
+
+def parse_domain_names(text,original_text):
     """."""
-    domains = Located(ioc_grammars.domain_name).searchString(text.lower())
-    return _listify(domains)
+    domains = ioc_grammars.domain_name.searchString(text.lower())
+    return _listify_with_get_position(domains,original_text)
 
 
-def parse_ipv4_addresses(text):
+def parse_ipv4_addresses(text,original_text):
     """."""
-    addresses = Located(ioc_grammars.ipv4_address).searchString(text)
-    return _listify(addresses)
+    addresses = ioc_grammars.ipv4_address.searchString(text)
+    return _listify_with_get_position(addresses,original_text)
 
 
-def parse_ipv6_addresses(text):
+def parse_ipv6_addresses(text,original_text):
     """."""
-    addresses = Located(ioc_grammars.ipv6_address).searchString(text)
-    return _listify(addresses)
+    addresses = ioc_grammars.ipv6_address.searchString(text)
+    return _listify_with_get_position(addresses,original_text)
 
 
-def parse_complete_email_addresses(text: str) -> List:
+def parse_complete_email_addresses(text: str,original_text: str) -> List:
     """."""
-    email_addresses = Located(ioc_grammars.complete_email_address).searchString(text)
-    return _listify(email_addresses)
+    email_addresses = ioc_grammars.complete_email_address.searchString(text)
+    return _listify_with_get_position(email_addresses,original_text)
 
 
-def parse_email_addresses(text: str) -> List:
+def parse_email_addresses(text: str,original_text:str) -> List:
     """."""
-    email_addresses = Located(ioc_grammars.email_address).searchString(text)
-    return _listify(email_addresses)
+    email_addresses = ioc_grammars.email_address.searchString(text)
+    return _listify_with_get_position(email_addresses,original_text)
 
 
 # there is a trailing underscore on this function to differentiate it from the argument with the same name
-def parse_imphashes_(text: str) -> List:
+def parse_imphashes_(text: str,original_text:str) -> List:
     """."""
-    full_imphash_instances = Located(ioc_grammars.imphash).searchString(text.lower())
-    full_imphash_instances, pos_map = _listify(full_imphash_instances)
+    full_imphash_instances = ioc_grammars.imphash.searchString(text.lower())
+    full_imphash_instances, pos_map = _listify_with_get_position(full_imphash_instances,original_text)
 
     imphashes = []
 
@@ -155,10 +179,10 @@ def parse_imphashes_(text: str) -> List:
 
 
 # there is a trailing underscore on this function to differentiate it from the argument with the same name
-def parse_authentihashes_(text: str) -> List:
+def parse_authentihashes_(text: str,original_text:str) -> List:
     """."""
-    full_authentihash_instances = Located(ioc_grammars.authentihash).searchString(text.lower())
-    full_authentihash_instances, pos_map = _listify(full_authentihash_instances)
+    full_authentihash_instances = ioc_grammars.authentihash.searchString(text.lower())
+    full_authentihash_instances, pos_map = _listify_with_get_position(full_authentihash_instances,original_text)
 
     authentihashes = []
 
@@ -168,58 +192,58 @@ def parse_authentihashes_(text: str) -> List:
     return authentihashes, pos_map
 
 
-def parse_md5s(text):
+def parse_md5s(text,original_text):
     """."""
-    md5s = Located(ioc_grammars.md5).searchString(text)
-    return _listify(md5s)
+    md5s = ioc_grammars.md5.searchString(text)
+    return _listify_with_get_position(md5s,original_text)
 
 
-def parse_sha1s(text):
+def parse_sha1s(text,original_text):
     """."""
-    sha1s = Located(ioc_grammars.sha1).searchString(text)
-    return _listify(sha1s)
+    sha1s = ioc_grammars.sha1.searchString(text)
+    return _listify_with_get_position(sha1s,original_text)
 
 
-def parse_sha256s(text):
+def parse_sha256s(text,original_text):
     """."""
-    sha256s = Located(ioc_grammars.sha256).searchString(text)
-    return _listify(sha256s)
+    sha256s = ioc_grammars.sha256.searchString(text)
+    return _listify_with_get_position(sha256s,original_text)
 
 
-def parse_sha512s(text):
+def parse_sha512s(text,original_text):
     """."""
-    sha512s = Located(ioc_grammars.sha512).searchString(text)
-    return _listify(sha512s)
+    sha512s = ioc_grammars.sha512.searchString(text)
+    return _listify_with_get_position(sha512s,original_text)
 
 
-def parse_ssdeeps(text):
+def parse_ssdeeps(text,original_text):
     """."""
-    ssdeeps = Located(ioc_grammars.ssdeep).searchString(text)
-    return _listify(ssdeeps)
+    ssdeeps = ioc_grammars.ssdeep.searchString(text)
+    return _listify_with_get_position(ssdeeps,original_text)
 
 
-def parse_asns(text):
+def parse_asns(text,original_text):
     """."""
-    asns = Located(ioc_grammars.asn).searchString(text)
-    return _listify(asns)
+    asns = ioc_grammars.asn.searchString(text)
+    return _listify_with_get_position(asns,original_text)
 
 
-def parse_cves(text):
+def parse_cves(text,original_text):
     """."""
-    cves = Located(ioc_grammars.cve).searchString(text)
-    return _listify(cves)
+    cves = ioc_grammars.cve.searchString(text)
+    return _listify_with_get_position(cves,original_text)
 
 
-def parse_ipv4_cidrs(text: str) -> List:
+def parse_ipv4_cidrs(text: str,original_text: str) -> List:
     """."""
-    cidrs = Located(ioc_grammars.ipv4_cidr).searchString(text)
-    return _listify(cidrs)
+    cidrs = ioc_grammars.ipv4_cidr.searchString(text)
+    return _listify_with_get_position(cidrs,original_text)
 
 
-def parse_registry_key_paths(text):
+def parse_registry_key_paths(text,original_text):
     """."""
-    parsed_registry_key_paths = Located(ioc_grammars.registry_key_path).searchString(text)
-    full_parsed_registry_key_paths, pos_map = _listify(parsed_registry_key_paths)
+    parsed_registry_key_paths = ioc_grammars.registry_key_path.searchString(text)
+    full_parsed_registry_key_paths, pos_map = _listify_with_get_position(parsed_registry_key_paths,original_text)
 
     registry_key_paths = []
     for registry_key_path in full_parsed_registry_key_paths:
@@ -238,34 +262,34 @@ def parse_registry_key_paths(text):
     return registry_key_paths, pos_map
 
 
-def parse_google_adsense_ids(text):
+def parse_google_adsense_ids(text,original_text):
     """."""
-    adsense_publisher_ids = Located(ioc_grammars.google_adsense_publisher_id).searchString(text)
-    return _listify(adsense_publisher_ids)
+    adsense_publisher_ids = ioc_grammars.google_adsense_publisher_id.searchString(text)
+    return _listify_with_get_position(adsense_publisher_ids,original_text)
 
 
-def parse_google_analytics_ids(text):
+def parse_google_analytics_ids(text,original_text):
     """."""
-    analytics_tracker_ids = Located(ioc_grammars.google_analytics_tracker_id).searchString(text)
-    return _listify(analytics_tracker_ids)
+    analytics_tracker_ids = ioc_grammars.google_analytics_tracker_id.searchString(text)
+    return _listify_with_get_position(analytics_tracker_ids,original_text)
 
 
-def parse_bitcoin_addresses(text):
+def parse_bitcoin_addresses(text,original_text):
     """."""
-    bitcoin_addresses = Located(ioc_grammars.bitcoin_address).searchString(text)
-    return _listify(bitcoin_addresses)
+    bitcoin_addresses = ioc_grammars.bitcoin_address.searchString(text)
+    return _listify_with_get_position(bitcoin_addresses,original_text)
 
 
-def parse_monero_addresses(text):
+def parse_monero_addresses(text,original_text):
     """."""
-    monero_addresses = Located(ioc_grammars.monero_address).searchString(text)
-    return _listify(monero_addresses)
+    monero_addresses = ioc_grammars.monero_address.searchString(text)
+    return _listify_with_get_position(monero_addresses,original_text)
 
 
-def parse_xmpp_addresses(text: str) -> List:
+def parse_xmpp_addresses(text: str,original_text:str) -> List:
     """."""
-    xmpp_addresses = Located(ioc_grammars.xmpp_address).searchString(text)
-    return _listify(xmpp_addresses)
+    xmpp_addresses = ioc_grammars.xmpp_address.searchString(text)
+    return _listify_with_get_position(xmpp_addresses,original_text)
 
 
 def _remove_xmpp_local_part(xmpp_addresses: List, text: str) -> str:
@@ -276,28 +300,28 @@ def _remove_xmpp_local_part(xmpp_addresses: List, text: str) -> str:
     return text
 
 
-def parse_mac_addresses(text):
+def parse_mac_addresses(text,original_text):
     """."""
-    mac_addresses = Located(ioc_grammars.mac_address).searchString(text)
-    return _listify(mac_addresses)
+    mac_addresses = ioc_grammars.mac_address.searchString(text)
+    return _listify_with_get_position(mac_addresses,original_text)
 
 
-def parse_user_agents(text):
+def parse_user_agents(text,original_text):
     """."""
-    user_agents = Located(ioc_grammars.user_agent).searchString(text)
-    return _listify(user_agents)
+    user_agents = ioc_grammars.user_agent.searchString(text)
+    return _listify_with_get_position(user_agents,original_text)
 
 
-def parse_file_paths(text):
+def parse_file_paths(text,original_text):
     """."""
-    file_paths = Located(ioc_grammars.file_path).searchString(text)
-    return _listify(file_paths)
+    file_paths = ioc_grammars.file_path.searchString(text)
+    return _listify_with_get_position(file_paths,original_text)
 
 
-def parse_phone_numbers(text):
+def parse_phone_numbers(text,original_text):
     """."""
-    phone_numbers = Located(ioc_grammars.phone_number).searchString(text[::-1])
-    list_phone_numbers, pos_map = _listify(phone_numbers)
+    phone_numbers = ioc_grammars.phone_number.searchString(text[::-1])
+    list_phone_numbers, pos_map = _listify_with_get_position(phone_numbers,original_text)
 
     clean_list_phone_numbers = []
     for phone_number in list_phone_numbers:
@@ -309,56 +333,56 @@ def parse_phone_numbers(text):
 
 def parse_pre_attack_tactics(text):
     """."""
-    data = Located(ioc_grammars.pre_attack_tactics_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.pre_attack_tactics_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_pre_attack_techniques(text):
     """."""
-    data = Located(ioc_grammars.pre_attack_techniques_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.pre_attack_techniques_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_enterprise_attack_mitigations(text):
     """."""
-    data = Located(ioc_grammars.enterprise_attack_mitigations_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.enterprise_attack_mitigations_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_enterprise_attack_tactics(text):
     """."""
-    data = Located(ioc_grammars.enterprise_attack_tactics_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.enterprise_attack_tactics_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_enterprise_attack_techniques(text):
     """."""
-    data = Located(ioc_grammars.enterprise_attack_techniques_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.enterprise_attack_techniques_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_mobile_attack_mitigations(text):
     """."""
-    data = Located(ioc_grammars.mobile_attack_mitigations_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.mobile_attack_mitigations_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_mobile_attack_tactics(text):
     """."""
-    data = Located(ioc_grammars.mobile_attack_tactics_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.mobile_attack_tactics_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_mobile_attack_techniques(text):
     """."""
-    data = Located(ioc_grammars.mobile_attack_techniques_grammar).searchString(text)
-    return _listify(data)
+    data = ioc_grammars.mobile_attack_techniques_grammar.searchString(text)
+    return _listify_with_get_position(data,text)
 
 
 def parse_tlp_labels(text):
     """."""
-    tlp_labels = Located(ioc_grammars.tlp_label).searchString(text)
-    return _listify(tlp_labels)
+    tlp_labels = ioc_grammars.tlp_label.searchString(text)
+    return _listify_with_get_position(tlp_labels,text)
 
 
 @click.command()
@@ -419,7 +443,6 @@ def cli_find_iocs(
         parse_authentihashes=not no_authentihashes,
     )
     ioc_string = json.dumps(iocs, indent=4, sort_keys=True)
-    print(ioc_string)
 
 
 def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
@@ -437,12 +460,11 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
     """Find observables in the given text."""
     iocs = dict()
 
-    text = prepare_text(text)
     # keep a copy of the original text - some items should be parsed from the original text
     original_text = text
     pos_map = {}
     # urls
-    iocs['urls'], pos_map['urls'] = parse_urls(text, parse_urls_without_scheme=parse_urls_without_scheme)
+    iocs['urls'], pos_map['urls'] = parse_urls(text, parse_urls_without_scheme=parse_urls_without_scheme,original_text=original_text)
     if not parse_domain_from_url and not parse_from_url_path:
         text = _remove_items(iocs['urls'], text)
     elif not parse_domain_from_url:
@@ -450,12 +472,12 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
         text = _remove_url_domain_name(iocs['urls'], text)
     elif not parse_from_url_path:
         text = _percent_decode_url(iocs['urls'], text)
-        text = _remove_url_paths(iocs['urls'], text)
+        text = _remove_url_paths(iocs['urls'], text,original_text)
     else:
         text = _percent_decode_url(iocs['urls'], text)
 
     # xmpp addresses
-    iocs['xmpp_addresses'], pos_map['xmpp_addresses'] = parse_xmpp_addresses(text)
+    iocs['xmpp_addresses'], pos_map['xmpp_addresses'] = parse_xmpp_addresses(text,original_text)
     if not parse_domain_name_from_xmpp_address:
         text = _remove_items(iocs['xmpp_addresses'], text)
     # even if we want to parse domain names from the xmpp_address,
@@ -464,9 +486,9 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
         text = _remove_xmpp_local_part(iocs['xmpp_addresses'], text)
 
     # complete email addresses
-    iocs['email_addresses_complete'], pos_map['email_addresses_complete'] = parse_complete_email_addresses(text)
+    iocs['email_addresses_complete'], pos_map['email_addresses_complete'] = parse_complete_email_addresses(text,original_text)
     # simple email addresses
-    iocs['email_addresses'], pos_map['email_addresses'] = parse_email_addresses(text)
+    iocs['email_addresses'], pos_map['email_addresses'] = parse_email_addresses(text,original_text)
     if not parse_domain_from_email_address:
         text = _remove_items(iocs['email_addresses_complete'], text)
         text = _remove_items(iocs['email_addresses'], text)
@@ -475,7 +497,7 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
     text = _remove_items(['[IPv6:'], text)
 
     # cidr ranges
-    iocs['ipv4_cidrs'], pos_map['email_addresses'] = parse_ipv4_cidrs(text)
+    iocs['ipv4_cidrs'], pos_map['email_addresses'] = parse_ipv4_cidrs(text,original_text)
     if not parse_address_from_cidr:
         text = _remove_items(iocs['ipv4_cidrs'], text)
 
@@ -487,40 +509,40 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
 
     # file hashes
     if parse_imphashes:
-        iocs['imphashes'], pos_map['imphashes'] = parse_imphashes_(text)
+        iocs['imphashes'], pos_map['imphashes'] = parse_imphashes_(text,original_text)
         # remove the imphashes so they are not also parsed as md5s
         text = _remove_items(iocs['imphashes'], text)
 
     if parse_authentihashes:
-        iocs['authentihashes'], pos_map['authentihashes'] = parse_authentihashes_(text)
+        iocs['authentihashes'], pos_map['authentihashes'] = parse_authentihashes_(text,original_text)
         # remove the authentihashes so they are not also parsed as sha256s
         text = _remove_items(iocs['authentihashes'], text)
 
     # domains
-    iocs['domains'], pos_map['domains'] = parse_domain_names(text)
+    iocs['domains'], pos_map['domains'] = parse_domain_names(text,original_text)
 
     # ip addresses
-    iocs['ipv4s'], pos_map['ipv4s'] = parse_ipv4_addresses(text)
-    iocs['ipv6s'], pos_map['ipv6s'] = parse_ipv6_addresses(text)
+    iocs['ipv4s'], pos_map['ipv4s'] = parse_ipv4_addresses(text,original_text)
+    iocs['ipv6s'], pos_map['ipv6s'] = parse_ipv6_addresses(text,original_text)
 
     # file hashes
-    iocs['sha512s'], pos_map['sha512s'] = parse_sha512s(text)
-    iocs['sha256s'], pos_map['sha256s'] = parse_sha256s(text)
-    iocs['sha1s'], pos_map['sha1s'] = parse_sha1s(text)
-    iocs['md5s'], pos_map['md5s'] = parse_md5s(text)
-    iocs['ssdeeps'], pos_map['ssdeeps'] = parse_ssdeeps(text)
+    iocs['sha512s'], pos_map['sha512s'] = parse_sha512s(text,original_text)
+    iocs['sha256s'], pos_map['sha256s'] = parse_sha256s(text,original_text)
+    iocs['sha1s'], pos_map['sha1s'] = parse_sha1s(text,original_text)
+    iocs['md5s'], pos_map['md5s'] = parse_md5s(text,original_text)
+    iocs['ssdeeps'], pos_map['ssdeeps'] = parse_ssdeeps(text,original_text)
 
     # misc
-    iocs['asns'], pos_map['asns'] = parse_asns(text)
-    iocs['cves'], pos_map['cves'] = parse_cves(original_text)
-    iocs['registry_key_paths'], pos_map['registry_key_paths'] = parse_registry_key_paths(text)
-    iocs['google_adsense_publisher_ids'], pos_map['google_adsense_publisher_ids'] = parse_google_adsense_ids(text)
-    iocs['google_analytics_tracker_ids'], pos_map['google_analytics_tracker_ids'] = parse_google_analytics_ids(text)
-    iocs['bitcoin_addresses'], pos_map['bitcoin_addresses'] = parse_bitcoin_addresses(text)
-    iocs['monero_addresses'], pos_map['monero_addresses'] = parse_monero_addresses(text)
-    iocs['mac_addresses'], pos_map['mac_addresses'] = parse_mac_addresses(text)
-    iocs['user_agents'], pos_map['user_agents'] = parse_user_agents(text)
-    iocs['phone_numbers'], pos_map['phone_numbers'] = parse_phone_numbers(text)
+    iocs['asns'], pos_map['asns'] = parse_asns(text,original_text)
+    iocs['cves'], pos_map['cves'] = parse_cves(original_text,original_text)
+    iocs['registry_key_paths'], pos_map['registry_key_paths'] = parse_registry_key_paths(text,original_text)
+    iocs['google_adsense_publisher_ids'], pos_map['google_adsense_publisher_ids'] = parse_google_adsense_ids(text,original_text)
+    iocs['google_analytics_tracker_ids'], pos_map['google_analytics_tracker_ids'] = parse_google_analytics_ids(text,original_text)
+    iocs['bitcoin_addresses'], pos_map['bitcoin_addresses'] = parse_bitcoin_addresses(text,original_text)
+    iocs['monero_addresses'], pos_map['monero_addresses'] = parse_monero_addresses(text,original_text)
+    iocs['mac_addresses'], pos_map['mac_addresses'] = parse_mac_addresses(text,original_text)
+    iocs['user_agents'], pos_map['user_agents'] = parse_user_agents(text,original_text)
+    iocs['phone_numbers'], pos_map['phone_numbers'] = parse_phone_numbers(text,original_text)
     iocs['tlp_labels'], pos_map['tlp_labels'] = parse_tlp_labels(original_text)
 
     # Da sistemare
@@ -554,8 +576,8 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
 
     # if there are still url paths in the text, remove them so they don't get parsed as file names
     if parse_from_url_path:
-        text = _remove_url_paths(iocs['urls'], text)
+        text = _remove_url_paths(iocs['urls'], text,original_text)
 
-    iocs['file_paths'], pos_map['file_paths'] = parse_file_paths(text)
+    iocs['file_paths'], pos_map['file_paths'] = parse_file_paths(text,original_text)
 
     return iocs, pos_map
