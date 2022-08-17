@@ -1,10 +1,8 @@
 """Python package for finding observables in text."""
-
 import json
 import re
 import urllib.parse as urlparse
 from typing import Dict, List
-
 import click
 import ioc_fanger
 from d8s_strings import string_remove_from_end
@@ -28,7 +26,7 @@ def _listify_with_get_position(indicator_list: ParseResults,text:str) -> List:
     for indicator in indicator_list:
         tmp_pos=0
         if len(indicator) > 0:
-            position = [_.start() for _ in re.finditer(indicator[0], text)]
+            position = [_.start() for _ in re.finditer(re.escape(indicator[0]), text)]
             if(indicator[0] in to_dedup):
                 continue
             to_dedup.append(indicator[0])
@@ -331,6 +329,30 @@ def parse_phone_numbers(text,original_text):
     return clean_list_phone_numbers, pos_map
 
 
+def is_valid_credit_card(credit_card):
+    credit_card=credit_card.replace('-','')
+    def digits_of(n):
+        return [int(d) for d in str(n)]
+    digits = digits_of(credit_card)
+    odd_digits = digits[-1::-2]
+    even_digits = digits[-2::-2]
+    checksum = 0
+    checksum += sum(odd_digits)
+    for d in even_digits:
+        checksum += sum(digits_of(d*2))
+    if checksum % 10 ==0:
+        return True
+    else:
+        return False
+def parse_credit_cards(text,original_text):
+    """."""
+    pattern = re.compile(r'(?:\d{4}-){3}\d{4}|\d{16}')
+    credit_cards=[]
+    for x in re.findall(pattern,text):
+        if is_valid_credit_card(x):
+            credit_cards.append([x])
+    return _listify_with_get_position(credit_cards,original_text)
+
 def parse_pre_attack_tactics(text):
     """."""
     data = ioc_grammars.pre_attack_tactics_grammar.searchString(text)
@@ -520,7 +542,7 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
 
     # domains
     iocs['domains'], pos_map['domains'] = parse_domain_names(text,original_text)
-
+    iocs['credit-cards'], pos_map['credit-cards'] = parse_credit_cards(text,original_text)
     # ip addresses
     iocs['ipv4s'], pos_map['ipv4s'] = parse_ipv4_addresses(text,original_text)
     iocs['ipv6s'], pos_map['ipv6s'] = parse_ipv6_addresses(text,original_text)
@@ -542,7 +564,7 @@ def find_iocs(  # noqa: CCR001 pylint: disable=R0912,R0915
     iocs['monero_addresses'], pos_map['monero_addresses'] = parse_monero_addresses(text,original_text)
     iocs['mac_addresses'], pos_map['mac_addresses'] = parse_mac_addresses(text,original_text)
     iocs['user_agents'], pos_map['user_agents'] = parse_user_agents(text,original_text)
-    iocs['phone_numbers'], pos_map['phone_numbers'] = parse_phone_numbers(text,original_text)
+    #iocs['phone_numbers'], pos_map['phone_numbers'] = parse_phone_numbers(text,original_text)
     iocs['tlp_labels'], pos_map['tlp_labels'] = parse_tlp_labels(original_text)
 
     # Da sistemare
