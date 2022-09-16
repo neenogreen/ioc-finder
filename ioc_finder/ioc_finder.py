@@ -27,6 +27,8 @@ def _listify_with_get_position(indicator_list: ParseResults,text:str) -> List:
         tmp_pos=0
         if len(indicator) > 0:
             position = [_.start() for _ in re.finditer(re.escape(indicator[0]), text)]
+            print(text)
+            print(indicator[0])
             if(indicator[0] in to_dedup):
                 continue
             to_dedup.append(indicator[0])
@@ -330,7 +332,7 @@ def parse_phone_numbers(text,original_text):
 
 
 def is_valid_credit_card(credit_card):
-    credit_card=credit_card.replace('-','')
+    credit_card=credit_card.replace('-','').replace(' ','')
     def digits_of(n):
         return [int(d) for d in str(n)]
     digits = digits_of(credit_card)
@@ -346,11 +348,12 @@ def is_valid_credit_card(credit_card):
         return False
 def parse_credit_cards(text,original_text):
     """."""
-    pattern = re.compile(r'(?:\d{4}-){3}\d{4}|\d{16}')
+    pattern = re.compile(r"[\d]+((-|\s)?[\d]+)+")
     credit_cards=[]
-    for x in re.findall(pattern,text):
-        if is_valid_credit_card(x):
-            credit_cards.append([x])
+    for x in re.finditer(pattern,text):
+        candidate=str(x.group())
+        if is_valid_credit_card(candidate) and len(candidate)>= 14:
+            credit_cards.append([candidate])
     return _listify_with_get_position(credit_cards,original_text)
 
 def parse_pre_attack_tactics(text):
