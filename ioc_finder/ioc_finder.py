@@ -27,8 +27,6 @@ def _listify_with_get_position(indicator_list: ParseResults,text:str) -> List:
         tmp_pos=0
         if len(indicator) > 0:
             position = [_.start() for _ in re.finditer(re.escape(indicator[0]), text)]
-            print(text)
-            print(indicator[0])
             if(indicator[0] in to_dedup):
                 continue
             to_dedup.append(indicator[0])
