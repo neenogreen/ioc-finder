@@ -328,21 +328,24 @@ def parse_phone_numbers(text,original_text):
 
     return clean_list_phone_numbers, pos_map
 
-
+def digits_of(n):
+    return [int(d) for d in str(n)]
 def is_valid_credit_card(credit_card):
     credit_card=credit_card.replace('-','').replace(' ','')
-    def digits_of(n):
-        return [int(d) for d in str(n)]
-    digits = digits_of(credit_card)
-    odd_digits = digits[-1::-2]
-    even_digits = digits[-2::-2]
-    checksum = 0
-    checksum += sum(odd_digits)
-    for d in even_digits:
-        checksum += sum(digits_of(d*2))
-    if checksum % 10 ==0:
-        return True
-    else:
+    try:
+        
+        digits = digits_of(credit_card)
+        odd_digits = digits[-1::-2]
+        even_digits = digits[-2::-2]
+        checksum = 0
+        checksum += sum(odd_digits)
+        for d in even_digits:
+            checksum += sum(digits_of(d*2))
+        if checksum % 10 ==0:
+            return True
+        else:
+            return False
+    except:
         return False
 def parse_credit_cards(text,original_text):
     """."""
@@ -350,7 +353,7 @@ def parse_credit_cards(text,original_text):
     credit_cards=[]
     for x in re.finditer(pattern,text):
         candidate=str(x.group())
-        if is_valid_credit_card(candidate) and len(candidate)>= 14:
+        if len(candidate)>= 14 and is_valid_credit_card(candidate):
             credit_cards.append([candidate])
     return _listify_with_get_position(credit_cards,original_text)
 
