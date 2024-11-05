@@ -25,7 +25,7 @@ def _listify_with_get_position(indicator_list: ParseResults, text: str) -> List:
     for indicator in indicator_list:
         tmp_pos = 0
         if len(indicator) > 0:
-            position = [_.start() for _ in re.finditer(re.escape(indicator[0]), text)]
+            position = [_.start() for _ in re.finditer(re.escape(indicator[0]), text,re.IGNORECASE)]
             if indicator[0] in to_dedup:
                 continue
             to_dedup.append(indicator[0])
@@ -242,6 +242,7 @@ def parse_cves(text, original_text):
 def parse_ipv4_cidrs(text: str, original_text: str) -> List:
     """."""
     cidrs = ioc_grammars.ipv4_cidr.searchString(text)
+    print(cidrs)
     return _listify_with_get_position(cidrs, original_text)
 
 
