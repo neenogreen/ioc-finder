@@ -10,6 +10,20 @@ from pyparsing import ParseResults, Located
 
 from ioc_finder import ioc_grammars
 
+def clean_and_validate_email(email):
+    
+
+    pattern = r"[a-zA-Z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    cleaned_email = re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$", "", email)
+
+    match= re.search(pattern, cleaned_email)
+    if match:
+        return match.group()
+    else:
+        return None
+        
+    
+    return email if re.match(pattern, email) else None
 
 def _deduplicate(indicator_list: List) -> List:
     """Deduplicate the list of observables."""
@@ -154,13 +168,19 @@ def parse_ipv6_addresses(text, original_text):
 def parse_complete_email_addresses(text: str, original_text: str) -> List:
     """."""
     email_addresses = ioc_grammars.complete_email_address.searchString(text)
-    return _listify_with_get_position(email_addresses, original_text)
+    cleaned_emails = [
+    [email] for email in {clean_and_validate_email(email[0]) for email in email_addresses} if email
+    ]    
+    return _listify_with_get_position(cleaned_emails, original_text)
 
 
 def parse_email_addresses(text: str, original_text: str) -> List:
     """."""
     email_addresses = ioc_grammars.email_address.searchString(text)
-    return _listify_with_get_position(email_addresses, original_text)
+    cleaned_emails = [
+    [email] for email in {clean_and_validate_email(email[0]) for email in email_addresses} if email
+    ]
+    return _listify_with_get_position(cleaned_emails, original_text)
 
 
 # there is a trailing underscore on this function to differentiate it from the argument with the same name
